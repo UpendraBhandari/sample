@@ -1,0 +1,50 @@
+ADIS Lift Control Mechanism
+
+
+When designing any data model for analysis of any system, it is important to identify of the event to be captured. In this case the grain is a "LIFT JOURNEY". A LIFT JOURNEY starts with the lift being empty (no passengers inside the lift) then proceed with passengers boarding the LIFT and ends with all passengers (including the intermediate stops lift made during the journey) exiting the lift. 
+
+Assume the Lift has 10 floors and 2 Lifts.
+During this event, we identify the activities which help in analysis of the system. 
+Which Lift we are observing
+Date of Observation
+Journey Start Time.
+Journey End Time. 
+Journey Wait Time.
+Floors where the lift stops.
+Count of Lift stops.
+Total Passenger who made the journey in the event of the lift
+Total Passenger who made the lift the entire day.
+Passengers entering the lift during an event.
+Passengers exiting the lift during an event.
+Door open time (in seconds) during the event.
+Door close time (in seconds) during the event.
+
+
+1. List the different stakeholders who would be interested in lift performance (a “stakeholder” is any person or group who have an interest in or may be affected by the lift performance).**
+
+Passenger - A Passenger is interested in identifying which lift (of two) can take him faste to his destination. Normally the choice is simple since the lift closer to his/her floor will reach him first. But the choice gets affected due to following reason
+Number of passengers present in the lift.
+He will made some initution about which lift will have more intermediate stops just by looking at some set of passengers. (It happens to me in my office, lift has less people but equal number of stops). How much this will help in final analysis is matter of debate.
+
+ADIS Maintanance Group - ADIS team is interested in understanding which lift is out of service. They want to understand what are the factors affecting the lift performance.
+
+Elevator Operator- He is interested how to minimise the time of the journey. He has to understand which floor has more passengers travelling (in/out) and what is time of day of their travelling. (Normally IT office has different teams working for different timezones. Their lunch/dinner time, working time are different)
+
+
+2. List other performance measures that it would be useful or important to measure – make sure these cover all of the stakeholders. (Hint: there are lots of these).*
+
+Yes, there are lot of these but I will focus on major ones only.
+ADIS Maintanance Team : They want to analyze basic performance measures.
+What is average journey time per event of the each passenger?
+What is average waiting time per event of the each passenger ?
+What are the factors affecting the journey wait time ? Is the speed ? is the floor stoppage per event ? Is the door speed? Or any other technical faults
+What are factors affecting the unavailability of the lift ? Is the Lift event count? Is the passenger counts? Can this be correlated ? (I know co-relation isn't causation )
+
+
+3. What would a suitable data representation look like? Please design a series of tables (as would be suitable to put in a database or spreadsheet). Make sure that the data representation (with very simple arithmetic calculations) is adequate to calculate the above measures, and any other measures that you deem important (and that those calculations are fairly easy and unambiguous).**
+
+
+
+
+
+
