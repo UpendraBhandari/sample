@@ -1,25 +1,11 @@
-ADIS Lift Control Mechanism
+ADIS Lift Control Mechanism - Model
 
+Theory:
 
-When designing a data model for analysis of any system, it is important to identify the event to be captured. In this case the event is a "LIFT JOURNEY". A LIFT JOURNEY starts with the lift being empty (no passengers inside the lift) then proceed with passengers boarding the LIFT and ends with all passengers (including the intermediate stops lift made during the journey) exiting the lift. 
+When designing a data model for analysis of a system, it is important to identify the grain of fact table. In this case the event is a "LIFT JOURNEY". A LIFT JOURNEY starts with the lift being empty (no passengers inside the lift) and no button inside the lift is active, then proceed with passengers boarding the LIFT and ends with all passengers (including passenger boarding the lift in the intermediate stops) exiting the lift. Hence each event (Lift Journey) has sub-events (intermediate stop lift made of floors). We will store records for each sub-event.
+
 
 Assume the Building has 15 floors and 3 Lifts.
-During this event, we identify the activities which help in analysis of the system. 
-Which Lift we are observing
-Date of Observation
-Journey Start Time.
-Journey End Time. 
-Journey Wait Time.
-Floors where the lift stops.
-Count of Lift stops.
-Total number Passenger who made the journey in the one event of the lift journey
-Total number Passenger who made the lift journey the entire day.
-Passengers entering the lift during an event.
-Passengers exiting the lift during an event.
-Door open time (in seconds) during the event.
-Door close time (in seconds) during the event.
-
-// up/down performance
 
 
 1. List the different stakeholders who would be interested in lift performance (a “stakeholder” is any person or group who have an interest in or may be affected by the lift performance).**
@@ -32,68 +18,274 @@ ADIS Maintanance Group - ADIS team is interested in understanding which lift is 
 what are the factors affecting the lift performance ?
 When a maintenance activity can be carried out?
 
-Elevator Operator- He is interested how to minimise the journey time. He has to understand which floor has more passengers travelling (in/out) and what is time of day of their travelling. (Normally IT office has different teams working for various geougraphically disparsed client with different timezones. Their lunch/dinner time, working time are different)
+Elevator Operator- He is interested how to minimise the journey time. He has to understand which floor has more passengers travelling (in/out) and what is time of day of their travelling. (Normally IT office has different teams working for various geographically disparsed client with different timezones. Their lunch/dinner time, working time are different)
+
+
+==================================
+
 
 
 2. List other performance measures that it would be useful or important to measure – make sure these cover all of the stakeholders. (Hint: there are lots of these).*
 
 Yes, there are lot of these but I will focus on major ones only.
+
 ADIS Maintanance Team : They want to analyze basic performance measures.
-What are the factors affecting the journey wait time ? Is the speed ? is the floor stoppage per event ? Is the door open/close time? Or any other technical faults
-What are factors affecting the unavailability of the lift ? Is the Lift event count? Is the passenger counts? Can this be correlated ? (I know co-relation isn't causation )
-When can be any maintenance activity be carried ?
+
+Which lift has operated in max_load ? Is this the reason for lift breakdown ? (co-relation isn't causation)
+When can be any maintenance activity be carried without impacting the  passenger journey?
 
 Passenger:
 What is average journey time per event of the each passenger?
 What is average waiting time per event of the each passenger ?
 
 Lift Operator:
-How to minize journey time by being at the important floor at right time?
+Which floor has maximum stoppage in a day (except ground floor) for each floor for each lift?
+
+==================================
 
 3. What would a suitable data representation look like? Please design a series of tables (as would be suitable to put in a database or spreadsheet). Make sure that the data representation (with very simple arithmetic calculations) is adequate to calculate the above measures, and any other measures that you deem important (and that those calculations are fairly easy and unambiguous).**
 
+We need to design data model for OLTP (what can we observe and record) and Datawarehouse system to ensure proper anaylsis.
 
-The Data model has Dimension and fact table. 
+
+OLTP (Application Model): 
+
+SQL:
+create database elevator_oltp;
+use elevator_oltp;
+
+Lift_event_table: This application table stores all the lift events (lift event starts when no button in lift control panel is active and passenger count is 0).
+
+create table lift_event (
+id bigint,
+event_date date,
+event_start_time timestamp, --a new timestamp is inserted when lift is empty and no buttons in control panel is active. This fields is same for one complete event of lift
+lift_stop_ts timestamp, --this fields indicates the time when lift stops and door opens. This activity is atomic
+lift_start_ts timestamp, --this fields indicates the time when door closes and lift starts moving. This activity is atomic
+lift_id	int, --id of the lift (out of 3) which is tracked
+floor_id int, --floor where lift is stopped
+passenger_in int, --count of passengers entering lift
+passenger_out int, --count of passengers exiting lift
+total_passenger_count int, --total count of passengers in an event of lift. The value resets when event_start_timestamp resets 
+lift_direction int -- indicates direction of lift 1 for "UP", 0 for "DOWN" 
+)
+row format delimited fields terminated by ','
+
+
+2. Lift_External_Control : This table tracks all the lift request made during the day. The control panel on each floor tracks the lift request and entries are made inside this table for each button press. The entry is updated when Lift reaches the floor and passenger enters the lift.
+
+create table lift_external_control (
+id bigint, --primary key to separate events
+event_date date, --day of year
+call_lift boolean, -- when lift request is made. True when button is pressed. It turns false when lift reaches the floor and passenger enters the lift.
+floor_id int, --floor where lift request is made
+lift_id	int, -- lift for which request is made
+lift_request_ts timestamp, --when the button is pressed
+lift_response_ts timestamp -- when lift reaches the floor and passenger enter the lift
+)
+row format delimited fields terminated by ','
+
+3. Elevator:
+create table elevator (
+lift_date_event date, -- date fields. A new entry is created everyday. For rest of day, the entry is updated for lift journey count
+lift_id int, -- id of lift
+lift_journey_count, -- total count when lift is moving
+lift_name string, -- lift name - e.g. Wing A Lift 1, Wing B Lift 1, Wind B Lift 2
+lift_max_passenger int -- max load by count of person
+)
+row format limited fields terminated by ',';
+
+
+ 
+Analytical Model:
+The Data model has 2 Dimensions and 1 fact table. 
 
 Dimesions:
-Date Dimension -  Dim_Date :A standard date dimension is needed for any time-series related analysis
-
-// I can only simulate/observe one day of data , so need to change this
-Person Dimension - Dim_Passenger: passenger_id, passenger_name, passenger_floor, passenger_journey_count
-create table dim_person (
-passenger_id int, passenger_name string, passenger_floor int, passenger_journey_count int, date_sk) 
+Date Dimension: A standard date dimension (with basic attributes)
+create table dim_date (
+date_sk int, 
+date_of_year date,
+week_of_year int,
+day_of_week String, 
+weekend int)
 row format delimited fields terminated by ',';
 
-Elevator Dimension - Dim_Elevator: elevator_id, elevator_available_count (in days), elevator_unavailable_count (in days), elevator_maintainance (in hours)
+Elevator Dimension - 
 create table dim_elevator (
-elevator_id int, elevator_available_count int, elevator_unavailable_count int, elevator_maintenance int)
+elevator_id int, 
+date_sk int,
+elevator_available_count int, -- number of hours lift was available
+elevator_unavailable_count int, -- number of hours lift was unavailable due to maintenance or cleaning
+elevator_maintenance int, --if elevator had any maintence during the day (1 for True, 0 for False)
+elevator_max_passenger int, --max load by count of person
+elevator_door_pause_time int -- wait time configured for door open and close. we wont calculate this time. Just for making more informative
+)
 row format delimited fields terminated by ',';
 
-Building Dimension
 
 Fact:
-The Event of Elevator: Fact_Elevator: SK, elevator_id, event_id, date_sk, passenger_count, total_passenger_count, passenger_in_count, passenger_out_count, journey_start (in seconds), journey_wait (in seconds), journey_end (in seconds), event_start_time, event_end_time, floor_count, floor_id 
+The Event of Elevator: Fact_Elevator: 
+
 create table fact_elevator (
-SK bigint, elevator_id int, event_id bigint, date_sk int, event_passenger_count int, //total_passenger_count bigint, passenger_in_count int, passenger_out_count int, journey_start int,  journey_wait int, journey_end int, event_start_time timestamp, lift_capacity boolean, floor_stop_count int, floor_id int)
+sk bigint, --surrogate key
+lift_id int, --id of lift whose event is recorded
+event_id int, -- event id, increment number based on per event. One event includes many sub-events/activities like intermediate floor stops. 
+event_date int, -- date
+event_start_time timestamp, -- timestamp of event
+event_passenger_count int, -- passenger count for 1 subevent
+passenger_in_count int,	--passenger entering in 1 subevent (floor stop)
+passenger_out_count int, --passenger exiting in 1 subevent (floor stop)
+journey_time_sec int, -- journey time for 1 subevent (between 2 floor stops)
+event_ts timestamp,  -- time when lift moves for the subevent
+lift_max_load int, -- does lift worked in max_load condition
+floor_stop_count int, -- number of floor stops made per event (increments for each subevent)
+floor_id int, --floor id of the subevent
+lift_wait_ts int, -- time in seconds when lift waits for between sub-events or intermediate floor stops
+lift_direction int -- lift goin up or down
+)
 row format delimited fields terminated by ',';
 
 
+
+==================================
 
 
 4. For “Average waiting time per passenger” and at least 2 other performance measures, describe how they can be easily calculated from your data model. Preferably write the SQL code you would use to calculate the waiting and journey times.**
 
-Passenger
-a. Average waiting time per passenger
+For Passenger
+a. Average waiting time per passenger:
+
+Theory:
+I assume the waiting time to be calculated from the time a Passenger makes request for a lift by pressing button on the floor plus any waiting/intermediate time he encounters when on the journey to his destination.
+Hence Average waiting time is avg(Waiting time outside the Lift) + Avg(waiting time inside the lift).
+
+Since the grain of fact is one journey of lift, we can directly calculate the average of wait inside lift. Also we have OLTP table whch tracks time outside lift
+
+SQL:
+select avg(fe.lift_wait_ts)+avg(lec.lift_response_ts-lec.lift_request_ts) from fact_elevate fe join lift_external_control lec (fe.event_date = lec.event_date)
 
 
 b. Average Journey Time per passenger
+Here I assume the Journey Time to be time when the lift is moving. This excludes any waiting time encountered due to intermediate stops(sub-events)
+
+Theory
+Again the Analytical Data Model captures data for every journey of Lift(the grain is sub-event). The Journey time is a measure which is directly available. Infact we can drill down to journey time for each subevent (including intermediate stops) but this is not the requirement.
+
+SQL
+select avg(journey_time_sec) from fact_elevator;
 
 
-c: For ADIS maitenance team:
-Which lift has operator under highest load and in what time interval?
-Which lift has most stoppage?
+For ADIS maitenance team:
+
+a. Find Time interval when each lift has operated under highest load.
+
+Theory:
+We have attribute in our fact_elevator called event_passenger_count which indicates total passenger count in lift. Also we have lift_max_load which is a measure to indicate whether the lift operated in max load. lift_max_load is calculated by joining fact with lift_dimension on lift id and checking event_passenger_count
+
+SQL
+select count(*),  hour(to_date(event_start_time)),lift_id as hour from fact_elevator where lift_max_load=1
+group by hour(to_date(event_start_time)), lift_id;
+
+b. When can any lift be used for maintenance/cleaning least impacting the journey i.e. find out time for time when lift has least passenger?
+
+Theory:
+We have to find in a day, when the lift was least used. To find it out we need to understand meaning of least used. We can assume it to be when lift wasn't used or. No passenger using the lift. However this will be rare and not the right measure. The best scenrio is when the lift has least number of passenger.
+
+select min(event_passenger_count), lift_id, hour(to_date(event_start_time)) as hour from fact_elevator
+group by lift_id, hour(to_date(event_start_time))
 
 
-d. For Lift operator: 
-Which floor has maximum stoppage in a day (except ground floor) for each floor? Find out the time interval of the same. e.g. 9-10, 1-2, 4-5
-What is peak time for each lift w.r.t stoppage, max_capacity?
+For Lift operator: 
+
+a. Which floor has maximum stoppage in a day (except ground floor) for each floor for each lift?
+
+select max(a.floor_count), lift_id, floor_id from (
+select count(*) as floor_count, lift_id, floor_id from fact_elevator group by lift_id, floor_id having floor_id !=0)a
+
+
+==================================
+
+5. Describe a simple but sensible algorithm or set of rules which could run a lift control mechanism. In what ways would this simple lift control mechanism work well, and in what ways might it not work well in the real world? What other complications might be important to turn this into a real-world, operational lift controller?**
+
+We have 2 Devices to monitor the system: Lift Control, External Control. 3 Tables store data from these systems
+Lift Control system  tracks Lift buttons (inside lift), door open-close button, number of person entering/exiting the lift, floor where lift stops, total number of people inside lift, start time lift when lift started the journey in a event, lift stops timestamp for one subevent, lift start timestamp for one subevent, direction of lift
+
+External control system tracks which floor made lift request, timestamp of the request, id of lift responded to to reuest, timestamp of lift reaching the floor and passenger entering the lift.
+
+Algorithm:
+Lift Control System: For the first event we assume, lift arrives at ground floor, all passenger have left the lift, no active button inside lift. This event is 0th event. We store the timestamp of this event.
+
+
+
+create table lift_event (
+id bigint,
+event_date date,
+event_start_time timestamp, --a new timestamp is inserted when lift is empty and no buttons in control panel is active. This fields is same for one complete event of lift
+lift_stop_ts timestamp, --this fields indicates the time when lift stops and door opens. This activity is atomic
+lift_start_ts timestamp, --this fields indicates the time when door closes and lift starts moving. This activity is atomic
+lift_id	int, --id of the lift (out of 3) which is tracked
+floor_id int, --floor where lift is stopped
+passenger_in int, --count of passengers entering lift
+passenger_out int, --count of passengers exiting lift
+current_passenger_count int, --passengers count in the subeventt of lift. The value resets when event_start_timestamp resets 
+lift_direction int, -- indicates direction of lift 1 for "UP", 0 for "DOWN" 
+button_active int -- any button inside lift is active (1 for Yes, 0 for No)
+)
+
+create table elevator (
+lift_date_event date, -- date fields. A new entry is created everyday. For rest of day, the entry is updated for lift journey count
+lift_id int, -- id of lift
+lift_journey_count, -- total count when lift is moving
+lift_name string, -- lift name - e.g. Wing A Lift 1, Wing B Lift 1, Wind B Lift 2
+lift_max_passenger int -- max load by count of person
+)
+
+WHILE TRUE
+	IF (LIFT_EVENT.BUTTON_ACTIVE==0 AND LIFT_EVENT.PASSENGER_IN==0 AND LIFT_EVENT.CURRENT_PASSENGER_COUNT==0) THEN
+		STORE CURRENT TIMESTAMP IN LIFT_EVENT.EVENT_START_TIME
+	ELSE
+		USE EXISTING EVENT_START_TIME
+	IF (LIFT_EVENT.BUTTON_ACTIVE=1 OR LIFT_EXTERNAL_ CONTROL.CALL_LIFT='Y') THEN
+		IF (LIFT_EXTERNAL_CONTROL.CALL_LIFT='N') THEN
+			MAKE ENTRY IN LIFT_EVENT table
+		IF (LIFT_EXTERNAL_CONTROL.CALL_LIFT='Y') THEN
+			WHEN LIFT ARRIVES
+			MAKE NEW ENTRY IN LIFT_ENTERNAL_TABLE
+			WHEN LIFT LEAVES
+			MAKE NEW ENTRY IN LIFT_EVENT_TABLE (e.g PASSENGER_IN, PASSENGER_COUNT, FLOOR_ID etc)
+			UPDATE ENTRY IN LIFT_ENTERNAL_TABLE WITH LIFT_EXTERNAL_CONTROL.CALL_LIFT='N'
+		
+			
+			
+			
+			
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
