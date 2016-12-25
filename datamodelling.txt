@@ -1,9 +1,9 @@
 ADIS Lift Control Mechanism
 
 
-When designing a data model for analysis of any system, it is important to identify of the event to be captured. In this case the event is a "LIFT JOURNEY". A LIFT JOURNEY starts with the lift being empty (no passengers inside the lift) then proceed with passengers boarding the LIFT and ends with all passengers (including the intermediate stops lift made during the journey) exiting the lift. 
+When designing a data model for analysis of any system, it is important to identify the event to be captured. In this case the event is a "LIFT JOURNEY". A LIFT JOURNEY starts with the lift being empty (no passengers inside the lift) then proceed with passengers boarding the LIFT and ends with all passengers (including the intermediate stops lift made during the journey) exiting the lift. 
 
-Assume the Lift has 15 floors and 3 Lifts.
+Assume the Building has 15 floors and 3 Lifts.
 During this event, we identify the activities which help in analysis of the system. 
 Which Lift we are observing
 Date of Observation
@@ -19,10 +19,12 @@ Passengers exiting the lift during an event.
 Door open time (in seconds) during the event.
 Door close time (in seconds) during the event.
 
+// up/down performance
+
 
 1. List the different stakeholders who would be interested in lift performance (a “stakeholder” is any person or group who have an interest in or may be affected by the lift performance).**
 
-Passenger - A Passenger is interested in identifying which lift (of two) can take him/her faster to his destination. Idenally the choice is simple since the lift closer to his/her floor will reach him first. But the choice gets affected due to following reason
+Passenger - A Passenger is interested in identifying which lift (of two) can take him/her faster to his destination. Ideally the choice is simple since the lift closer to his/her floor will reach him first. But the choice gets affected due to following reason
 Number of passengers present in the lift.
 He will have some initution about how many intermediate stops the lift will have just by looking at some set of passengers. (It happens to me in my office (2000 person in one building), lift has less people but equal number of stops). How much this will help in final analysis is matter of debate.
 
@@ -37,24 +39,29 @@ Elevator Operator- He is interested how to minimise the journey time. He has to 
 
 Yes, there are lot of these but I will focus on major ones only.
 ADIS Maintanance Team : They want to analyze basic performance measures.
-What is average journey time per event of the each passenger?
-What is average waiting time per event of the each passenger ?
-What are the factors affecting the journey wait time ? Is the speed ? is the floor stoppage per event ? Is the door open/close speed? Or any other technical faults
+What are the factors affecting the journey wait time ? Is the speed ? is the floor stoppage per event ? Is the door open/close time? Or any other technical faults
 What are factors affecting the unavailability of the lift ? Is the Lift event count? Is the passenger counts? Can this be correlated ? (I know co-relation isn't causation )
 When can be any maintenance activity be carried ?
+
+Passenger:
+What is average journey time per event of the each passenger?
+What is average waiting time per event of the each passenger ?
+
+Lift Operator:
+How to minize journey time by being at the important floor at right time?
 
 3. What would a suitable data representation look like? Please design a series of tables (as would be suitable to put in a database or spreadsheet). Make sure that the data representation (with very simple arithmetic calculations) is adequate to calculate the above measures, and any other measures that you deem important (and that those calculations are fairly easy and unambiguous).**
 
 
 The Data model has Dimension and fact table. 
+
 Dimesions:
 Date Dimension -  Dim_Date :A standard date dimension is needed for any time-series related analysis
 
-
-
+// I can only simulate/observe one day of data , so need to change this
 Person Dimension - Dim_Passenger: passenger_id, passenger_name, passenger_floor, passenger_journey_count
 create table dim_person (
-passenger_id int, passenger_name string, passenger_floor, passenger_journey_count ) 
+passenger_id int, passenger_name string, passenger_floor int, passenger_journey_count int, date_sk) 
 row format delimited fields terminated by ',';
 
 Elevator Dimension - Dim_Elevator: elevator_id, elevator_available_count (in days), elevator_unavailable_count (in days), elevator_maintainance (in hours)
@@ -65,9 +72,9 @@ row format delimited fields terminated by ',';
 Building Dimension
 
 Fact:
-The Event of Elevator: Fact_Elevator: SK, elevator_id, event_id, date_sk, passenger_count, total_passenger_count, passenger_in_count, passenger_out_count, journey_start, journey_wait, journey_end, event_start_time, event_end_time, floor_count, floor_id 
+The Event of Elevator: Fact_Elevator: SK, elevator_id, event_id, date_sk, passenger_count, total_passenger_count, passenger_in_count, passenger_out_count, journey_start (in seconds), journey_wait (in seconds), journey_end (in seconds), event_start_time, event_end_time, floor_count, floor_id 
 create table fact_elevator (
-SK bigint, elevator_id int, event_id bigint, date_sk int, passenger_count int, total_passenger_count bigint, passenger_in_count int, passenger_out_count int, journey_start int, lift_capacity boolean, journey_wait int, journey_end int, event_start_time timestamp, event_end_time timestamp, floor_count int, floor_id int)
+SK bigint, elevator_id int, event_id bigint, date_sk int, event_passenger_count int, //total_passenger_count bigint, passenger_in_count int, passenger_out_count int, journey_start int,  journey_wait int, journey_end int, event_start_time timestamp, lift_capacity boolean, floor_stop_count int, floor_id int)
 row format delimited fields terminated by ',';
 
 
@@ -75,14 +82,18 @@ row format delimited fields terminated by ',';
 
 4. For “Average waiting time per passenger” and at least 2 other performance measures, describe how they can be easily calculated from your data model. Preferably write the SQL code you would use to calculate the waiting and journey times.**
 
+Passenger
 a. Average waiting time per passenger
-select elevator_id, event_id, sum(journey_wait_time)/total_passenger_count from fact_elevator group by event_id ,elevator_id
-
-b. Identify the floor with max number of stops between 09:00 to 10:00 and 17:00 to 18:00
 
 
-c. Best time for maintenance for any lift in working days
+b. Average Journey Time per passenger
 
 
-d. Which lift is busiest among 3? Which lift has most breakdown and at what time?
+c: For ADIS maitenance team:
+Which lift has operator under highest load and in what time interval?
+Which lift has most stoppage?
 
+
+d. For Lift operator: 
+Which floor has maximum stoppage in a day (except ground floor) for each floor? Find out the time interval of the same. e.g. 9-10, 1-2, 4-5
+What is peak time for each lift w.r.t stoppage, max_capacity?
