@@ -35,7 +35,8 @@ object RecipeItems {
       *  Filter recipe list which contain beef. 
       *  Convert prepTime and cookTime into hours. Minute time is divided by 60 to get hours rounding of the result with precision of 2
       */
-     val recipeTime = sqlContext.sql("""
+     /*
+      val recipeTime = sqlContext.sql("""
       select 
       *,
       case 
@@ -72,7 +73,89 @@ object RecipeItems {
       from 
       recipeItems where lower(ingredients) like '%beef%'   
       """)
+     */
+     
+     
+     val recipeTime = sqlContext.sql("""
+      select 
+      *,
+      case            
+      when (prepTime like '%D%') then
+       case         
+         when (substr(nvl(prepTime,'PT00M'),-1)='M') then
+          case             
+            when (prepTime like '%H%') then
+             (regexp_replace(substr(prepTime,2,1),'[^0-9]','')*24) + 
+             regexp_replace(substr(prepTime,4,2),'[^0-9]','')+ 
+             round(regexp_replace(substr(prepTime,-3), '[^0-9]','')/60,2)
+            else            
+              regexp_replace(substr(prepTime,2,1),'[^0-9]','')*24 + 
+              round(regexp_replace(substr(prepTime,-3), '[^0-9]','')/60,2)
+           end         
+         when (substr(nvl(prepTime,'PT00H'),-1)='H') then
+          regexp_replace(substr(prepTime,2,1),'[^0-9]','')*24 + 
+          regexp_replace(substr(prepTime,-3),'[^0-9]','')
+         else         
+         regexp_replace(substr(prepTime,2,1),'[^0-9]','')*24
+       end             
+       when (substr(nvl(prepTime,'PT00M'),-1)='M' and prepTime not like '%D%') then
+        case           
+          when (prepTime like '%H%') then 
+           regexp_replace(substr(prepTime,3,2),'[^0-9]','')+ 
+           round(regexp_replace(substr(prepTime,-3), '[^0-9]','')/60,2)
+          else          
+           round(regexp_replace(prepTime, '[^0-9]','')/60,2)
+        end         
+        when (substr(nvl(prepTime,'PT00H'),-1)='H') then
+         regexp_replace(prepTime, '[^0-9]','')
+      end as prepTimeinHrs,      
       
+      case 
+      -- For cookTime, check whether it has Day entry      
+      when (cookTime like '%D%') then
+       case 
+         -- If "Yes", Check whether it has Minutes entry
+         when (substr(nvl(cookTime,'PT00M'),-1)='M') then
+          case 
+            --if the cookTime column has Day, Hours and Minutes entry
+            when (cookTime like '%H%') then
+             (regexp_replace(substr(cookTime,2,1),'[^0-9]','')*24) + 
+             regexp_replace(substr(cookTime,4,2),'[^0-9]','')+ 
+             round(regexp_replace(substr(cookTime,-3), '[^0-9]','')/60,2)
+            else
+            --else cookTime column has Day and Minutes entry only
+              regexp_replace(substr(cookTime,2,1),'[^0-9]','')*24 + 
+              round(regexp_replace(substr(cookTime,-3), '[^0-9]','')/60,2)
+           end
+         --if cookTime column has Day and Hours entry only
+         when (substr(nvl(cookTime,'PT00H'),-1)='H') then
+          regexp_replace(substr(cookTime,2,1),'[^0-9]','')*24 + 
+          regexp_replace(substr(cookTime,-3),'[^0-9]','')
+         --if entry has only days column
+        else 
+         -- cookTime column has Day  entry only
+         regexp_replace(substr(cookTime,2,1),'[^0-9]','')*24
+        end          
+      
+       --if cookTime column has Minutes entry and no Day entry
+       when (substr(nvl(cookTime,'PT00M'),-1)='M' and cookTime not like '%D%') then
+       case 
+       --if the cookTime column has Hours and Minutes entry
+         when (cookTime like '%H%') then 
+          regexp_replace(substr(cookTime,3,2),'[^0-9]','')+ 
+          round(regexp_replace(substr(cookTime,-3), '[^0-9]','')/60,2)
+         else
+         --else cookTime column has Minutes entry only
+          round(regexp_replace(cookTime, '[^0-9]','')/60,2)
+       end 
+       --if cookTime column has only Hours entry
+       when (substr(nvl(cookTime,'PT00H'),-1)='H') then
+         regexp_replace(cookTime, '[^0-9]','')  
+      end as cookTimeinHrs      
+      from 
+      recipeItems where lower(ingredients) like '%beef%'   
+      """)
+     
      recipeTime.registerTempTable("temprecipeTable")
      
      val finalResult = sqlContext.sql("""

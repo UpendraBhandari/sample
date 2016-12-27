@@ -2,7 +2,7 @@ ADIS Lift Control Mechanism - Model
 
 Theory:
 
-When designing a data model for analysis of a system, it is important to identify the grain of fact table. In this case the event is a "LIFT JOURNEY". A LIFT JOURNEY starts with the lift being empty (no passengers inside the lift) and no button inside the lift is active, then proceed with passengers boarding the LIFT and ends with all passengers (including passenger boarding the lift in the intermediate stops) exiting the lift. Hence each event (Lift Journey) has sub-events (intermediate stop lift made of floors). We will store records for each sub-event.
+While designing a data model for analysis of a system, it is important to identify the grain of fact table. In this case the event is a "LIFT JOURNEY". A LIFT JOURNEY starts with the lift being empty (no passengers inside the lift) and no button inside the lift is active, then proceed with passengers boarding the LIFT and ends with all passengers (including passenger boarding the lift in the intermediate stops) exiting the lift. Hence each event (Lift Journey) has sub-events (intermediate stop lift made of floors). We will store records for each sub-event.
 
 
 Assume the Building has 15 floors and 3 Lifts.
@@ -45,21 +45,19 @@ Which floor has maximum stoppage in a day (except ground floor) for each floor f
 
 3. What would a suitable data representation look like? Please design a series of tables (as would be suitable to put in a database or spreadsheet). Make sure that the data representation (with very simple arithmetic calculations) is adequate to calculate the above measures, and any other measures that you deem important (and that those calculations are fairly easy and unambiguous).**
 
-We need to design data model for OLTP (what can we observe and record) and Datawarehouse system to ensure proper anaylsis.
+We need to design data model for OLTP (what can we observe and record) and Datawarehouse system to ensure proper anaylsis. Datwarehouse Tables are created in Hive
 
 
 OLTP (Application Model): 
 
 SQL:
-create database elevator_oltp;
-use elevator_oltp;
 
 Lift_event_table: This application table stores all the lift events (lift event starts when no button in lift control panel is active and passenger count is 0).
 
 create table lift_event (
 id bigint,
 event_date date,
-event_start_time timestamp, --a new timestamp is inserted when lift is empty and no buttons in control panel is active. This fields is same for one complete event of lift
+event_start_time timestamp, --indicates thes start of event when lift is empty and no buttons in control panel is active and request is made for lift. 
 lift_stop_ts timestamp, --this fields indicates the time when lift stops and door opens. This activity is atomic
 lift_start_ts timestamp, --this fields indicates the time when door closes and lift starts moving. This activity is atomic
 lift_id	int, --id of the lift (out of 3) which is tracked
@@ -69,10 +67,10 @@ passenger_out int, --count of passengers exiting lift
 total_passenger_count int, --total count of passengers in an event of lift. The value resets when event_start_timestamp resets 
 lift_direction int -- indicates direction of lift 1 for "UP", 0 for "DOWN" 
 )
-row format delimited fields terminated by ','
 
 
-2. Lift_External_Control : This table tracks all the lift request made during the day. The control panel on each floor tracks the lift request and entries are made inside this table for each button press. The entry is updated when Lift reaches the floor and passenger enters the lift.
+
+2. Lift_External_Control : This table tracks all the lift requests made during the day. The control panel on each floor tracks the lift request and entries are made in this table for each button press. The entry is updated when Lift reaches the floor and passenger enters the lift.
 
 create table lift_external_control (
 id bigint, --primary key to separate events
@@ -83,9 +81,9 @@ lift_id	int, -- lift for which request is made
 lift_request_ts timestamp, --when the button is pressed
 lift_response_ts timestamp -- when lift reaches the floor and passenger enter the lift
 )
-row format delimited fields terminated by ','
 
-3. Elevator:
+
+3. Elevator: Just a sample
 create table elevator (
 lift_date_event date, -- date fields. A new entry is created everyday. For rest of day, the entry is updated for lift journey count
 lift_id int, -- id of lift
@@ -93,7 +91,27 @@ lift_journey_count, -- total count when lift is moving
 lift_name string, -- lift name - e.g. Wing A Lift 1, Wing B Lift 1, Wind B Lift 2
 lift_max_passenger int -- max load by count of person
 )
-row format limited fields terminated by ',';
+
+
+4. Elevator Button panel table indicates button which are active for inside the lift. 1 for Active, 0 for InActive. This table has only 3 rows (for 3 lifts). The columns will be updated 1 or 0 depending on the floor request made from inside the lift.
+create table elevator_button_panel (
+liftId int,
+floor0 int,
+floor1 int,
+floor2 int,
+floor3 int,
+floor4 int,
+floor5 int,
+floor6 int,
+floor7 int,
+floor8 int,
+floor9 int,
+floor10 int,
+floor11 int,
+floor12 int,
+floor13 int,
+floor14 int,
+floor15 int)
 
 
  
@@ -156,7 +174,7 @@ For Passenger
 a. Average waiting time per passenger:
 
 Theory:
-I assume the waiting time to be calculated from the time a Passenger makes request for a lift by pressing button on the floor plus any waiting/intermediate time he encounters when on the journey to his destination.
+I assume the waiting time to be calculated from the time a Passenger makes request for a lift by pressing button on the floor plus any waiting/intermediate time he encounters during the journey.
 Hence Average waiting time is avg(Waiting time outside the Lift) + Avg(waiting time inside the lift).
 
 Since the grain of fact is one journey of lift, we can directly calculate the average of wait inside lift. Also we have OLTP table whch tracks time outside lift
@@ -177,19 +195,19 @@ select avg(journey_time_sec) from fact_elevator;
 
 For ADIS maitenance team:
 
-a. Find Time interval when each lift has operated under highest load.
+a. Find all Time interval when each lift has operated under highest load.
 
 Theory:
 We have attribute in our fact_elevator called event_passenger_count which indicates total passenger count in lift. Also we have lift_max_load which is a measure to indicate whether the lift operated in max load. lift_max_load is calculated by joining fact with lift_dimension on lift id and checking event_passenger_count
 
 SQL
-select count(*),  hour(to_date(event_start_time)),lift_id as hour from fact_elevator where lift_max_load=1
+select count(*),  hour(to_date(event_start_time)) as hour,lift_id  from fact_elevator where lift_max_load=1
 group by hour(to_date(event_start_time)), lift_id;
 
 b. When can any lift be used for maintenance/cleaning least impacting the journey i.e. find out time for time when lift has least passenger?
 
 Theory:
-We have to find in a day, when the lift was least used. To find it out we need to understand meaning of least used. We can assume it to be when lift wasn't used or. No passenger using the lift. However this will be rare and not the right measure. The best scenrio is when the lift has least number of passenger.
+We have to find in a day, when the lift was least used. The best scenrio is when the lift has least number of passenger.
 
 select min(event_passenger_count), lift_id, hour(to_date(event_start_time)) as hour from fact_elevator
 group by lift_id, hour(to_date(event_start_time))
@@ -213,48 +231,30 @@ Lift Control system  tracks Lift buttons (inside lift), door open-close button, 
 External control system tracks which floor made lift request, timestamp of the request, id of lift responded to to reuest, timestamp of lift reaching the floor and passenger entering the lift.
 
 Algorithm:
-Lift Control System: For the first event we assume, lift arrives at ground floor, all passenger have left the lift, no active button inside lift. This event is 0th event. We store the timestamp of this event.
+For the First event we assume, lift arrives at ground floor, all passenger have left the lift, no active button inside lift. We store the timestamp of this event.
 
-
-
-create table lift_event (
-id bigint,
-event_date date,
-event_start_time timestamp, --a new timestamp is inserted when lift is empty and no buttons in control panel is active. This fields is same for one complete event of lift
-lift_stop_ts timestamp, --this fields indicates the time when lift stops and door opens. This activity is atomic
-lift_start_ts timestamp, --this fields indicates the time when door closes and lift starts moving. This activity is atomic
-lift_id	int, --id of the lift (out of 3) which is tracked
-floor_id int, --floor where lift is stopped
-passenger_in int, --count of passengers entering lift
-passenger_out int, --count of passengers exiting lift
-current_passenger_count int, --passengers count in the subeventt of lift. The value resets when event_start_timestamp resets 
-lift_direction int, -- indicates direction of lift 1 for "UP", 0 for "DOWN" 
-button_active int -- any button inside lift is active (1 for Yes, 0 for No)
-)
-
-create table elevator (
-lift_date_event date, -- date fields. A new entry is created everyday. For rest of day, the entry is updated for lift journey count
-lift_id int, -- id of lift
-lift_journey_count, -- total count when lift is moving
-lift_name string, -- lift name - e.g. Wing A Lift 1, Wing B Lift 1, Wind B Lift 2
-lift_max_passenger int -- max load by count of person
-)
 
 WHILE TRUE
-	IF (LIFT_EVENT.BUTTON_ACTIVE==0 AND LIFT_EVENT.PASSENGER_IN==0 AND LIFT_EVENT.CURRENT_PASSENGER_COUNT==0) THEN
-		STORE CURRENT TIMESTAMP IN LIFT_EVENT.EVENT_START_TIME
+	IF (All COLUMNS in ELEVATOR_BUTTON_PANEL=0 (no button active) AND LIFT_EVENT.PASSENGER_IN=0 AND LIFT_EVENT.CURRENT_PASSENGER_COUNT=0 AND LIFT_EXTERNAL_CONTROL.CALL_LIFT='Y') THEN
+		STORE CURRENT TIMESTAMP IN EVENT_START_TIME
 	ELSE
 		USE EXISTING EVENT_START_TIME
-	IF (LIFT_EVENT.BUTTON_ACTIVE=1 OR LIFT_EXTERNAL_ CONTROL.CALL_LIFT='Y') THEN
+	IF (ANY BUTTON is Active(ELEVATOR_BUTTON_PANEL.columns=1) OR LIFT_EXTERNAL_CONTROL.CALL_LIFT='Y' AND LIFT STOPS at any FLOOR) THEN
 		IF (LIFT_EXTERNAL_CONTROL.CALL_LIFT='N') THEN
 			MAKE ENTRY IN LIFT_EVENT table
-		IF (LIFT_EXTERNAL_CONTROL.CALL_LIFT='Y') THEN
+		ELSE
 			WHEN LIFT ARRIVES
-			MAKE NEW ENTRY IN LIFT_ENTERNAL_TABLE
+			MAKE NEW ENTRY IN LIFT_EXTERNAL_TABLE
 			WHEN LIFT LEAVES
-			MAKE NEW ENTRY IN LIFT_EVENT_TABLE (e.g PASSENGER_IN, PASSENGER_COUNT, FLOOR_ID etc)
-			UPDATE ENTRY IN LIFT_ENTERNAL_TABLE WITH LIFT_EXTERNAL_CONTROL.CALL_LIFT='N'
-		
+			MAKE NEW ENTRY IN LIFT_EVENT_TABLE (e.g PASSENGER_IN/OUT, PASSENGER_COUNT, FLOOR_ID etc)
+			UPDATE ENTRY IN LIFT_EXTERNAL_TABLE WITH LIFT_EXTERNAL_CONTROL.CALL_LIFT='N' FOR THE LIFT WHICH REACHED THE FLOOR
+			UPDATE ENTRY in ELEVATOR_BUTTON_PANEL (to indicate lift has reached the floor)	
+
+There algorithm works well after the first event (an assumption). If the Control system can track the attributes then the algorithm can fullfil most of requirement.
+However there are many activities not considered or assumped to be true. 
+e.g. when lift arrives at an intermediate floor, we assume the passenger boarding time and lift leaving the floor to be same. This is not the case.
+We have not assumed door open/close time for any calculation. 	
+We have assumed lift overload capacity to be depedent on number of person inside lift. We have not considered the Weigt which is actually more important.			
 			
 			
 			
